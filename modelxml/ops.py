@@ -1,5 +1,6 @@
 from .xmlio import mutate_file, read_xml, save_xml
 from .mutations import (
+    set_model_points,
     set_all_analysis_to_not_run,
     set_analysis_to_run,
     create_start_mesh_analysis,
@@ -9,6 +10,9 @@ from .mutations import (
 
 def run_copy_paste(in_path: str, out_path: str | None = None):
     mutate_file(in_path, None, out_path)
+
+def run_set_model_points(in_path: str, out_path: str | None = None):
+    mutate_file(in_path, set_model_points, out_path)
 
 def run_set_all_analyses_off(in_path: str, out_path: str | None = None):
     mutate_file(in_path, set_all_analysis_to_not_run, out_path)

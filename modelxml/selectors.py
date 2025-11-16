@@ -1,3 +1,4 @@
+import math
 import re
 
 def interfaces(root):
@@ -94,24 +95,26 @@ def masonry_materials(root):
 
 def analysis_state(root, analysis_name):
     pattern = (
-        r"displ\s*=\s*([\d.]+)\s*cm.*?"
-        r"F\s*=\s*([\d.]+)\s*kN.*?"
-        r"Load multiplier F/Fo\s*=\s*([\d.]+)\s*%.*?"
-        r"Fmax\s*=\s*([\d.]+)\s*kN"
+        r"displ\s*=\s*([\d.]+)\s*cm.*?"                  # displacement
+        r"F\s*=\s*([\d.]+)\s*kN.*?"                      # force
+        r"Load\s*multiplier\s*F/Fo\s*=\s*([\d.]+)\s*%?"  # load multiplier
+        r"(?:.*?Fmax\s*=\s*([\d.]+)\s*kN)?$"             # optional Fmax
     )
     for elem in root.iter("Analysis"):
         if elem.attrib.get("Name") != analysis_name: continue
         states = elem.find("States")
         for state in states.findall("State"):
             displ = F = load_multiplier = Fmax = None
-            match = re.search(pattern, state.attrib['ExitDescription'])
+            match = re.search(pattern, state.attrib.get('ExitDescription', ''))
             if match:
-                displ, F, load_multiplier, Fmax = map(float, match.groups())
+                displ, F, load_multiplier, Fmax = [
+                    float(v) if v is not None else None for v in match.groups()
+                ]
             return {
-                'Fo': state.attrib['Fo'],
-                'State': state.attrib['State'],
-                'Exit': state.attrib['Exit'],
-                'ExitDescription': state.attrib['ExitDescription'],
+                'Fo': state.attrib.get('Fo'),
+                'State': state.attrib.get('State'),
+                'Exit': state.attrib.get('Exit'),
+                'ExitDescription': state.attrib.get('ExitDescription'),
                 'displ': displ,
                 'F': F,
                 'Load_multiplier': load_multiplier,
@@ -220,6 +223,49 @@ def nodes(root):
 
         records.append(node_info)
     return records
+
+def _get_closest_node(nodes, x, y, z):
+    closest_node = None
+    min_distance = float('inf')
+
+    for node in nodes:
+        dx = node['X'] - x
+        dy = node['Y'] - y
+        dz = node['Z'] - z
+        distance = math.sqrt(dx*dx + dy*dy + dz*dz)
+
+        if distance < min_distance:
+            min_distance = distance
+            closest_node = node
+
+    return closest_node
+
+def model_points_location_map(root):
+    node_list = nodes(root)
+    geometry_data = geometry(root)
+    location_map = {}
+
+    for i, pier in enumerate(geometry_data['Piers']):
+        x = pier['Origin'][0]
+        node = _get_closest_node(node_list, x, 0, 0)
+        location_name = f"Pier_{i+1}_top"
+        location_map[location_name] = {key: node[key] for key in ["Key", "X", "Y", "Z"]}
+
+    for i, arch in enumerate(geometry_data['Spans']):
+        if i == 0:
+            x_pier = geometry_data['Piers'][i]['Origin'][0]
+            x_pier -= geometry_data['Piers'][i]['b2'] / 2 
+            x_arch = x_pier - arch['L'] / 2
+        else:
+            x_pier = geometry_data['Piers'][i-1]['Origin'][0]
+            x_pier += geometry_data['Piers'][i-1]['b2'] / 2 
+            x_arch = x_pier + arch['L'] / 2
+        
+        node = _get_closest_node(node_list, x_arch, 0, arch['f'])
+        location_name = f"Arch_{i}_middle"
+        location_map[location_name] = {key: node[key] for key in ["Key", "X", "Y", "Z"]}
+    
+    return location_map
 
 def nodec(root):
     # === 3️⃣ Coletar todos os nós ===
