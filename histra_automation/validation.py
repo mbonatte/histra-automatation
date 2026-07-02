@@ -89,6 +89,22 @@ def validate_load_combinations(root, analysis_names=None):
                 ))
 
         matching_condition_key = load_condition_key_by_name.get(combination_name)
+        if not matching_condition_key and combination_name.lower().endswith("_combination"):
+            base_name = combination_name[:-12]
+            matching_condition_key = load_condition_key_by_name.get(base_name)
+            if not matching_condition_key:
+                # Case-insensitive fallback for base_name
+                for name, key in load_condition_key_by_name.items():
+                    if name.lower() == base_name.lower():
+                        matching_condition_key = key
+                        break
+        if not matching_condition_key:
+            # Case-insensitive fallback for direct name
+            for name, key in load_condition_key_by_name.items():
+                if name.lower() == combination_name.lower():
+                    matching_condition_key = key
+                    break
+
         if matching_condition_key and not _has_active_column(combination, matching_condition_key):
             issues.append(ValidationIssue(
                 "error",

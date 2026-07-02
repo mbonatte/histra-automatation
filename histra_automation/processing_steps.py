@@ -76,6 +76,7 @@ def pre_processing(input_path, scenario, xml_file, **kwargs):
         logger.info("Copying input: %s → %s", input_path.split('\\')[-1], xml_file.split('\\')[-1])
         run_copy_paste(input_path, out_path=xml_file)
 
+        logger.info("Validating model file: %s", xml_file.split('\\')[-1])
         validate_model_file(xml_file, analysis_names=_scenario_analysis_names(scenario))
 
         logger.info("Updating materials for index %s", index)
