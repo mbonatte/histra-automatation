@@ -30,21 +30,33 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------------------------
 
 def generate_mesh(file, mode="local", timeout_seconds=200, **kwargs):
-    logger.info("Creating mesh analysis for file: %s", file.split('\\')[-1])
+    file_name = file.split('\\')[-1]
+
+    logger.info("Creating mesh analysis for file: %s", file_name)
+
     try:
         run_create_start_mesh_analysis(file)
         run_set_all_analyses_off(file)
         run_set_analysis_on(file, "StartMesh")
 
-        logger.info("Running mesh analysis for file: %s", file.split('\\')[-1])
+        logger.info("Running mesh analysis for file: %s", file_name)
         run_program(file, mode, timeout_seconds)
 
     except Exception as e:
-        logger.exception("Error during mesh generation for %s: %s", file.split('\\')[-1], e)
+        logger.exception("Error during mesh generation for %s: %s", file_name, e)
         raise
+    else:
+        logger.info("Mesh generation complete for file: %s", file_name)
     finally:
-        run_set_all_analyses_off(file)
-        logger.info("Mesh generation complete for file: %s", file.split('\\')[-1])
+        try:
+            run_set_all_analyses_off(file)
+            logger.info("Analyses turned off after mesh step for file: %s", file_name)
+        except Exception as cleanup_error:
+            logger.exception(
+                "Failed to turn analyses off after mesh step for %s: %s",
+                file_name,
+                cleanup_error,
+            )
 
 def prepare_model(file):
     logger.info("Preparing model for file: %s", file.split('\\')[-1])
