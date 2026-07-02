@@ -10,6 +10,15 @@ histra_models/
 #Results
 scenarios_results.json
 
+# Output-analysis artifacts belong in the analysis repository
+dashboard*.ipynb
+surrogate.ipynb
+explore_hrx.ipynb
+PDF/
+failure_mode/
+*.paint
+*.xlsx
+
 PSTools/
 
 # ai-memory: caches / índices derivados
