@@ -168,23 +168,34 @@ def restrain(root):
             records.append(record)
     return records
 
-def foundation_interfaces(root):
+def get_foundation_locations(root):
     geo = geometry(root)
+
+    foundations = {}
+    for i, p in enumerate(geo["Piers"]):
+        x0 = p["Origin"][0]
+        width = p["B1f"] + p["b2"] + p["B3f"]
+        z0 = -(p["H"] + p["Hf"])
+        foundations[f"pier_{i+1}"] = (x0, width, z0)
+
+    return foundations
+
+def foundation_interfaces(root):
     inter = interfaces(root)
 
-    restrains_interfaces = [i for i in inter if i['ParentTypeElement1'] == 'Restraint']
-
-    foundation_locations = [
-        (p["Origin"][0], p["B1f"] + p["b2"] + p["B3f"], -(p["H"] + p["Hf"]))
-        for p in geo["Piers"]
+    restrains_interfaces = [
+        i for i in inter if i['ParentTypeElement1'] == 'Restraint'
     ]
+
+    foundation_locations = get_foundation_locations(root)
 
     foundations_interfaces = {}
 
-    for i, (x0, width, z0) in enumerate(foundation_locations):
+    for pier_name, (x0, width, z0) in foundation_locations.items():
         left, bottom, right = [], [], []
         for inter in restrains_interfaces:
             x, _, z = map(float, inter["VInt3D1"].split(";"))
+
             if x0 - width * 0.55 < x < x0 + width * 0.55:
                 if abs(z - z0) < 1:
                     bottom.append(inter)
@@ -192,7 +203,8 @@ def foundation_interfaces(root):
                     left.append(inter)
                 elif x > x0:
                     right.append(inter)
-        foundations_interfaces[f"pier_{i+1}"] = (left, bottom, right)
+
+        foundations_interfaces[pier_name] = (left, bottom, right)
 
     return foundations_interfaces
 

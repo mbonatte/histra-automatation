@@ -1,8 +1,9 @@
 import logging
+from typing import List, Tuple
 import copy
 import math
 from xml.etree import ElementTree as ET
-from .selectors import geometry, masonry_materials, nodes, model_points_location_map, quads, interfaces, foundation_interfaces
+from .selectors import geometry, masonry_materials, nodes, model_points_location_map, quads, interfaces, get_foundation_locations, foundation_interfaces
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -11,6 +12,10 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_FOUNDATION_INTERFACE_MATERIALS = ("Foundation_Soil", "Soil")
+SCOURED_FOUNDATION_INTERFACE_MATERIAL = "Damaged"
+
 
 def set_all_analysis_to_not_run(root) -> None:
     for analysis in root.iter("Analysis"):
@@ -143,23 +148,76 @@ def _get_material_key(root: ET.Element, material_name: str) -> str:
             return m["Key"]
     raise KeyError(f"Material '{material_name}' not found.")
 
+
+def _get_first_material_key(root: ET.Element, material_names: Tuple[str, ...]) -> str:
+    for material_name in material_names:
+        try:
+            return _get_material_key(root, material_name)
+        except KeyError:
+            continue
+    raise KeyError(f"None of the materials were found: {', '.join(material_names)}")
+
+
+def _compute_interface_x_center(interface: dict) -> float:
+    x_values = [float(interface[f"VInt3D{i}"].split(';')[0]) for i in range(1, 5)]
+    return sum(x_values) / 4.0
+
+def _select_outside_delta_interfaces(
+    interfaces: List[dict],
+    location: Tuple[float, float, float],
+    delta: float
+) -> List[str]:
+    x0, width, _ = location
+    half_zone = ((1-delta) * width) / 2
+
+    min_x = x0 - half_zone
+    max_x = x0 + half_zone
+
+    logging.debug(f"min_x='{min_x}', max_x='{max_x}'")
+
+    selected_keys = []
+
+    for iface in interfaces:
+        x_center = _compute_interface_x_center(iface)
+        if x_center < min_x or x_center > max_x:
+            logging.debug(f"x_center='{x_center}'")
+            selected_keys.append(iface["Key"])
+
+    return selected_keys
+
+def set_default_interface(root, interfaces):
+    interfaces_keys = [f_i['Key'] for f_i in interfaces]
+    mat_key = _get_first_material_key(root, DEFAULT_FOUNDATION_INTERFACE_MATERIALS)
+    set_material_to_interfaces(root, interfaces_keys, mat_key)
+
+
 def update_foundation_interfaces(root, interfaces: dict) -> None:
     if not interfaces:
+        logging.debug("No interfaces provided. Nothing to update.")
         return
-    # restr = [i for i in interfaces(root) if i["ParentTypeElement1"] == "Restraint"]
-    # foundation_mk = _get_material_key(root, "Foundation")
-    # foundation_quad_keys = [q["Key"] for q in quads(root) if q["MaterialKey"] == foundation_mk]
-    # target_ifaces = {i["Key"] for i in restr if i["ParentElementKey2"] in foundation_quad_keys}
+
+    foundation_locations = get_foundation_locations(root)
     found_inter = foundation_interfaces(root)
-    logging.debug(f"Found foundation interfaces: {found_inter}")
-    
-    for pier, material in interfaces.items():
-        logging.debug(f"Processing pier='{pier}', material='{material}'")
+
+    for pier, delta in interfaces.items():
+        logging.debug(f"Processing pier='{pier}', delta='{delta}'")
 
         if pier not in found_inter:
             logging.warning(f"Pier '{pier}' not found in foundation interfaces. Skipping.")
             continue
-        
-        target_ifaces_keys = [f_i['Key'] for f_i in found_inter[pier][1]]
-        mat_key = _get_material_key(root, material)
-        set_material_to_interfaces(root, target_ifaces_keys, mat_key)
+
+        bottom_interfaces = found_inter[pier][1]
+        if not bottom_interfaces:
+            logging.warning(f"No bottom foundation interfaces found for pier '{pier}'. Skipping.")
+            continue
+
+        set_default_interface(root, bottom_interfaces)
+
+        target_interface_keys = _select_outside_delta_interfaces(
+            bottom_interfaces,
+            foundation_locations[pier],
+            delta
+        )
+
+        mat_key = _get_material_key(root, material_name=SCOURED_FOUNDATION_INTERFACE_MATERIAL)
+        set_material_to_interfaces(root, target_interface_keys, mat_key)
