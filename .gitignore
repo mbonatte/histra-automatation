@@ -1,9 +1,35 @@
+#Histra models to be analysed
+histra_models/
+
+#Histra files
 *.hrx
 *.hrxk
 *.hrb
 *.hrbk
 
+#Results
+scenarios_results.json
+
 PSTools/
+
+# ai-memory: caches / índices derivados
+ai-memory/**/*.sqlite*
+ai-memory/**/*.db
+ai-memory/**/embeddings/
+ai-memory/**/cache/
+ai-memory/**/tmp/
+ai-memory/**/logs/
+ai-memory/models/
+ai-memory/raw/
+ai-memory/db/
+
+# ai-memory: credenciais / config local
+ai-memory/auth.json
+ai-memory/config.toml
+
+# manter a wiki versionada
+!ai-memory/wiki/
+!ai-memory/wiki/**
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
