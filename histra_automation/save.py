@@ -1,7 +1,7 @@
 from modelxml.xmlio import read_xml
 from modelxml.selectors import geometry, model_points_location_map, masonry_materials, analysis_state, analysis_key
 
-from extract_results import get_model_points_displacement, get_reactions
+from .extract_results import get_model_points_displacement, get_reactions
 
 def save_scenario_info(scenario, file):
     root = read_xml(file)

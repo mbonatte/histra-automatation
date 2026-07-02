@@ -11,6 +11,7 @@ histra_models/
 scenarios_results.json
 
 # Output-analysis artifacts belong in the analysis repository
+histra-output-analysis/
 dashboard*.ipynb
 surrogate.ipynb
 explore_hrx.ipynb

@@ -3,8 +3,8 @@ import time
 import glob
 import traceback
 
-from run_program import SolverRunError
-from processing_steps import pre_processing, processing, pos_processing
+from .run_program import SolverRunError
+from .processing_steps import pre_processing, processing, pos_processing
 
 def delete_model_copies(file_path):
     """Delete all files that match '*_copy.*' in the file directory."""

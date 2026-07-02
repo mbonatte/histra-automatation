@@ -10,9 +10,9 @@ from modelxml.ops import (
     run_update_foundation_ifaces
 )
 
-from save import save_scenario_info, save_outputs
+from .save import save_scenario_info, save_outputs
 
-from run_program import run_program
+from .run_program import run_program
 
 # -------------------------------------------------------------------
 # Configure logging

@@ -1,0 +1,1 @@
+"""HiStrA output generation helpers."""
