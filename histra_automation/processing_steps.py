@@ -13,6 +13,7 @@ from modelxml.ops import (
 from .save import save_scenario_info, save_outputs
 
 from .run_program import run_program
+from .validation import validate_model_file
 
 # -------------------------------------------------------------------
 # Configure logging
@@ -75,6 +76,8 @@ def pre_processing(input_path, scenario, xml_file, **kwargs):
         logger.info("Copying input: %s → %s", input_path.split('\\')[-1], xml_file.split('\\')[-1])
         run_copy_paste(input_path, out_path=xml_file)
 
+        validate_model_file(xml_file, analysis_names=_scenario_analysis_names(scenario))
+
         logger.info("Updating materials for index %s", index)
         run_update_material(xml_file, scenario.get("Materials", []))
 
@@ -105,6 +108,14 @@ def processing(xml_file, scenario, mode="local", timeout=360, **kwargs):
             raise
 
     logger.info("Processing complete for index: %s", index)
+
+
+def _scenario_analysis_names(scenario):
+    analyses = scenario.get("Analysis", {})
+    if isinstance(analyses, dict):
+        return analyses.keys()
+    return analyses
+
 
 def pos_processing(scenario, db_path, xml_file, **kwargs):
     logger.info("Starting post-processing for file: %s", xml_file.split('\\')[-1])
