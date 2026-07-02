@@ -1,8 +1,11 @@
+import logging
 import subprocess
 from pathlib import Path
 
 EXE_PATH = r"C:\Program Files\Gruppo Sismica\HiStrA Bridges 2025.1.6\SolverHistra.exe"
 PSEXEC_PATH = r"C:\Users\mbonatte\Documents\Coding\histra-automation\PSTools\PsExec.exe"
+
+logger = logging.getLogger(__name__)
 
 class SolverRunError(Exception):
     """Raised when the solver fails to execute properly."""
@@ -11,7 +14,7 @@ class SolverRunError(Exception):
         self.file_path = file_path
 
 
-def run_program(model_path, mode="psexec", timeout_seconds=600):
+def run_program(model_path, mode="psexec", timeout_seconds=600, print_output: bool = False):
     model_path = Path(model_path).resolve()
 
     if not model_path.exists():
@@ -50,14 +53,10 @@ def run_program(model_path, mode="psexec", timeout_seconds=600):
             check=True
         )
 
-        print("\nSolver finished successfully.")
-        print(f"Return code: {result.returncode}")
-
-        print("\n--- STDOUT ---")
-        print(decode_output(result.stdout))
-
-        print("\n--- STDERR ---")
-        print(decode_output(result.stderr))
+        logger.info("Solver finished successfully. Return code: %s", result.returncode)
+        if print_output:
+            logger.info("--- STDOUT ---\n%s", decode_output(result.stdout))
+            logger.info("--- STDERR ---\n%s", decode_output(result.stderr))
 
         return result.stdout.strip()
 
@@ -65,15 +64,12 @@ def run_program(model_path, mode="psexec", timeout_seconds=600):
         stdout_text = decode_output(e.stdout)
         stderr_text = decode_output(e.stderr)
 
-        print(f"Timeout: {model_path} exceeded {timeout_seconds} seconds. Killing...")
+        logger.error("Timeout: %s exceeded %s seconds. Killing...", model_path, timeout_seconds)
+        if print_output:
+            logger.error("--- PARTIAL STDOUT ---\n%s", stdout_text)
+            logger.error("--- PARTIAL STDERR ---\n%s", stderr_text)
 
-        print("\n--- PARTIAL STDOUT ---")
-        print(stdout_text)
-
-        print("\n--- PARTIAL STDERR ---")
-        print(stderr_text)
-
-        print("\nKilling SolverHistra.exe...")
+        logger.error("Killing SolverHistra.exe...")
 
         subprocess.run(
             ["taskkill", "/IM", "SolverHistra.exe", "/F"],
@@ -93,15 +89,11 @@ def run_program(model_path, mode="psexec", timeout_seconds=600):
         stdout_text = decode_output(e.stdout)
         stderr_text = decode_output(e.stderr)
 
-        print("\nSolver returned an error.")
-        print(f"Return code: {e.returncode}")
-        print(f"Model path:\n", model_path)
-
-        print("\n--- STDOUT ---")
-        print(stdout_text)
-
-        print("\n--- STDERR ---")
-        print(stderr_text)
+        logger.error("Solver returned an error. Return code: %s", e.returncode)
+        logger.error("Model path:\n%s", model_path)
+        if print_output:
+            logger.error("--- STDOUT ---\n%s", stdout_text)
+            logger.error("--- STDERR ---\n%s", stderr_text)
 
         if "with error code 1" in stderr_text:
             raise SolverRunError(
