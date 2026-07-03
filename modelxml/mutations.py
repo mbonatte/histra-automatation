@@ -14,23 +14,55 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 DEFAULT_FOUNDATION_INTERFACE_MATERIALS = ("Foundation_Soil", "Soil")
-SCOURED_FOUNDATION_INTERFACE_MATERIAL = "Damaged"
+SCOURED_FOUNDATION_INTERFACE_MATERIAL = "Soil_removed"
 
+def set_analysis_state(analysis, new_state: str) -> None:
+    analysis_name = analysis.get("Name")
+    analysis_key = analysis.get("Key")
+
+    logging.debug(
+        "Setting analysis '%s' [Key=%s] states to '%s'",
+        analysis_name,
+        analysis_key,
+        new_state,
+    )
+
+    states = analysis.find("States")
+    if states is None:
+        logging.debug(
+            "Analysis '%s' [Key=%s] has no States element",
+            analysis_name,
+            analysis_key,
+        )
+        return
+
+    for state in states.findall("State"):
+        logging.debug(
+            "Analysis '%s' [Key=%s], state Id=%s before was '%s'",
+            analysis_name,
+            analysis_key,
+            state.get("Id"),
+            state.get("State"),
+        )
+
+        state.set("State", new_state)
+
+        logging.debug(
+            "Analysis '%s' [Key=%s], state Id=%s after is '%s'",
+            analysis_name,
+            analysis_key,
+            state.get("Id"),
+            state.get("State"),
+        )
 
 def set_all_analysis_to_not_run(root) -> None:
     for analysis in root.iter("Analysis"):
-        states = analysis.find("States")
-        if states is None: continue
-        for state in states.findall("State"):
-            state.set("State", "NotExecutedNotToBeExecuted")
+        set_analysis_state(analysis, "NotExecutedNotToBeExecuted")
 
 def set_analysis_to_run(root, name) -> None:
     for analysis in root.iter("Analysis"):
         if analysis.get("Name") == name:
-            states = analysis.find("States")
-            if states is None: break
-            for state in states.findall("State"):
-                state.set("State", "NotExecutedToBeExecute")
+            set_analysis_state(analysis, "NotExecutedToBeExecute")
             break
 
 def _copy_analysis(root, copy_from):
@@ -165,23 +197,105 @@ def _compute_interface_x_center(interface: dict) -> float:
 def _select_outside_delta_interfaces(
     interfaces: List[dict],
     location: Tuple[float, float, float],
-    delta: float
+    delta: float,
+    mode: str = "uniform",
 ) -> List[str]:
     x0, width, _ = location
-    half_zone = ((1-delta) * width) / 2
+    delta = float(delta)
 
-    min_x = x0 - half_zone
-    max_x = x0 + half_zone
+    if not 0 <= delta <= 1:
+        raise ValueError(f"delta must be between 0 and 1. Got: {delta}")
+    
+    min_foundation_x = x0 - width / 2
+    max_foundation_x = x0 + width / 2
 
-    logging.debug(f"min_x='{min_x}', max_x='{max_x}'")
+    mode = mode.lower()
 
+    if mode == "uniform":
+        # delta=0.2 means remove/select 20% total,
+        # split equally between left and right.
+        half_zone = ((1 - delta) * width) / 2
+
+        min_x = x0 - half_zone
+        max_x = x0 + half_zone
+
+        logging.debug(
+            "Uniform scour: x0='%s', width='%s', delta='%s', min_x='%s', max_x='%s'",
+            x0,
+            width,
+            delta,
+            min_x,
+            max_x,
+        )
+
+        def should_select(x_center: float) -> bool:
+            return x_center < min_x or x_center > max_x
+
+    elif mode == "left":
+        # delta=0.2 means select the left 20% of the foundation width.
+        limit_x = min_foundation_x + delta * width
+
+        logging.debug(
+            "Left scour: x0='%s', width='%s', delta='%s', min_foundation_x='%s', limit_x='%s'",
+            x0,
+            width,
+            delta,
+            min_foundation_x,
+            limit_x,
+        )
+
+        def should_select(x_center: float) -> bool:
+            return x_center < limit_x
+    
+    elif mode == "right":
+        # delta=0.2 means select the right 20% of the foundation width.
+        limit_x = max_foundation_x - delta * width
+
+        logging.debug(
+            "Right scour: x0='%s', width='%s', delta='%s', limit_x='%s', max_foundation_x='%s'",
+            x0,
+            width,
+            delta,
+            limit_x,
+            max_foundation_x,
+        )
+
+        def should_select(x_center: float) -> bool:
+            return x_center > limit_x
+
+    else:
+        raise ValueError(
+            f"Unsupported scour mode '{mode}'. Expected 'left', 'right', or 'uniform'."
+        )
+    
     selected_keys = []
 
     for iface in interfaces:
         x_center = _compute_interface_x_center(iface)
-        if x_center < min_x or x_center > max_x:
-            logging.debug(f"x_center='{x_center}'")
+
+        logging.debug(
+            "Interface Key='%s', x_center='%s'",
+            iface.get("Key"),
+            x_center,
+        )
+
+        if should_select(x_center):
+            logging.debug(
+                "Selected interface Key='%s', x_center='%s', mode='%s', delta='%s'",
+                iface.get("Key"),
+                x_center,
+                mode,
+                delta,
+            )
             selected_keys.append(iface["Key"])
+
+    logging.debug(
+        "Selected %s interface(s) for mode='%s', delta='%s': %s",
+        len(selected_keys),
+        mode,
+        delta,
+        selected_keys,
+    )
 
     return selected_keys
 
@@ -191,19 +305,28 @@ def set_default_interface(root, interfaces):
     set_material_to_interfaces(root, interfaces_keys, mat_key)
 
 
-def update_foundation_interfaces(root, interfaces: dict) -> None:
-    if not interfaces:
+def update_foundation_interfaces(root, interface_scenario: dict) -> None:
+    if not interface_scenario:
         logging.debug("No interfaces provided. Nothing to update.")
         return
 
     foundation_locations = get_foundation_locations(root)
     found_inter = foundation_interfaces(root)
 
-    for pier, delta in interfaces.items():
-        logging.debug(f"Processing pier='{pier}', delta='{delta}'")
+    mat_key = _get_material_key(
+        root,
+        material_name=SCOURED_FOUNDATION_INTERFACE_MATERIAL,
+    )
+
+    for pier, scour_config in interface_scenario.items():
+        logging.debug("Processing pier='%s', scour_config='%s'", pier, scour_config)
 
         if pier not in found_inter:
-            logging.warning(f"Pier '{pier}' not found in foundation interfaces. Skipping.")
+            logging.warning("Pier '%s' not found in foundation interfaces. Skipping.", pier)
+            continue
+
+        if pier not in foundation_locations:
+            logging.warning("Pier '%s' not found in foundation locations. Skipping.", pier)
             continue
 
         bottom_interfaces = found_inter[pier][1]
@@ -213,11 +336,26 @@ def update_foundation_interfaces(root, interfaces: dict) -> None:
 
         set_default_interface(root, bottom_interfaces)
 
-        target_interface_keys = _select_outside_delta_interfaces(
-            bottom_interfaces,
-            foundation_locations[pier],
-            delta
-        )
+        # Backward compatibility:
+        # allow "pier_1": 0.2 and treat it as uniform.
+        if isinstance(scour_config, dict):
+            scour_items = scour_config.items()
+        else:
+            scour_items = [("uniform", scour_config)]
 
-        mat_key = _get_material_key(root, material_name=SCOURED_FOUNDATION_INTERFACE_MATERIAL)
-        set_material_to_interfaces(root, target_interface_keys, mat_key)
+        for mode, delta in scour_items:
+            logging.debug(
+                "Processing pier='%s', mode='%s', delta='%s'",
+                pier,
+                mode,
+                delta,
+            )
+
+            target_interface_keys = _select_outside_delta_interfaces(
+                bottom_interfaces,
+                foundation_locations[pier],
+                delta,
+                mode=mode,
+            )
+
+            set_material_to_interfaces(root, target_interface_keys, mat_key)

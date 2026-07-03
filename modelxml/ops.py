@@ -26,5 +26,5 @@ def run_create_start_mesh_analysis(in_path: str, out_path: str | None = None):
 def run_update_material(in_path: str, materials: list, out_path: str | None = None):
     mutate_file(in_path, lambda r: update_materials(r, materials), out_path)
 
-def run_update_foundation_ifaces(in_path: str, scenario: dict, out_path: str | None = None):
-    mutate_file(in_path, lambda r: update_foundation_interfaces(r, scenario), out_path)
+def run_update_foundation_ifaces(in_path: str, interface_scenario: dict, out_path: str | None = None):
+    mutate_file(in_path, lambda r: update_foundation_interfaces(r, interface_scenario), out_path)
