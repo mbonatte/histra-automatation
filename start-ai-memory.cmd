@@ -143,10 +143,60 @@ if not exist "%AI_MEMORY_CENTRAL_AUTH%" (
     )
 )
 
-echo Starting ai-memory server...
+cd /d "%PROJECT_ROOT%"
+
+REM Do not rerun install-instructions if AGENTS.md already exists,
+REM because ai-memory creates AGENTS.md.bak-* backup files.
+if not exist "%PROJECT_ROOT%\AGENTS.md" (
+    echo.
+    echo AGENTS.md not found.
+    echo Installing ai-memory instructions for Codex...
+    echo.
+    "%AI_MEMORY_EXE%" --data-dir "%AI_MEMORY_DATA_DIR%" install-instructions --target AGENTS.md
+) else (
+    echo.
+    echo AGENTS.md already exists.
+    echo Skipping install-instructions to avoid creating AGENTS.md.bak-* files.
+    echo.
+)
+
+REM ============================================================
+REM  Install Codex integration
+REM ============================================================
+
+echo Installing ai-memory MCP config for Codex...
+"%AI_MEMORY_EXE%" --data-dir "%AI_MEMORY_DATA_DIR%" install-mcp --client codex --apply
+
+echo.
+echo Installing ai-memory hooks for Codex...
+"%AI_MEMORY_EXE%" --data-dir "%AI_MEMORY_DATA_DIR%" install-hooks --agent codex --apply --project-strategy repo-root
+
+REM ============================================================
+REM  Install Antigravity integration
+REM ============================================================
+
+echo.
+echo Installing ai-memory MCP config for Antigravity...
+"%AI_MEMORY_EXE%" --data-dir "%AI_MEMORY_DATA_DIR%" install-mcp --client antigravity --apply
+
+echo.
+echo Installing ai-memory hooks for Antigravity...
+"%AI_MEMORY_EXE%" --data-dir "%AI_MEMORY_DATA_DIR%" install-hooks --agent antigravity --apply --project-strategy repo-root
+
+echo.
+echo Current ai-memory status:
+echo.
+"%AI_MEMORY_EXE%" --data-dir "%AI_MEMORY_DATA_DIR%" status
+
+echo.
+echo ============================================================
+echo  Starting ai-memory server
+echo ============================================================
 echo.
 echo Keep this window open while using Codex.
 echo Press Ctrl+C to stop the server.
+echo.
+echo ============================================================
 echo.
 
 "%AI_MEMORY_EXE%" --data-dir "%AI_MEMORY_DATA_DIR%" serve --transport http --bind "%AI_MEMORY_BIND%" --enable-web
