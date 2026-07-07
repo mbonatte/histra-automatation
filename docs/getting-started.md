@@ -155,6 +155,34 @@ In this example, the automation searches for the material named `Backfill` and m
 
 The `Name` field must match the material name used in the HiStrA model.
 
+### Analysis order and interface changes
+
+Foundation interface changes are model-state changes. They are not stored only inside a single analysis.
+
+This matters when running scour scenarios. For example, suppose `LiveLoad_1` has its initial stress state set from `Scour_1`. If the automation runs `Scour_2` before `LiveLoad_1`, the model interfaces have already been changed to the `Scour_2` condition. `LiveLoad_1` may still use the initial stress state from `Scour_1`, but the active interface properties in the model will be those left by `Scour_2`.
+
+For that reason, run all analyses that belong to one scour condition before changing the interfaces for another scour condition. A safe order is:
+
+```text
+Scour_1
+LiveLoad_1
+Modal_1
+Scour_2
+LiveLoad_2
+Modal_2
+```
+
+Avoid this order:
+
+```text
+Scour_1
+Scour_2
+LiveLoad_1
+LiveLoad_2
+```
+
+The order of items in the scenario `Analysis` dictionary is therefore important. If an analysis must run with a specific scour/interface condition, place it immediately after that scour phase or repeat the same interface configuration for that analysis so it is applied again before the solver runs.
+
 ---
 
 ## 7. Generate multiple scenarios
