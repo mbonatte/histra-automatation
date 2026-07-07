@@ -221,6 +221,21 @@ for i, scenario in enumerate(scenarios):
 
 Each scenario creates a temporary copy of the base model, modifies it, runs the HiStrA solver, extracts the results, and then deletes the temporary files.
 
+To inspect the generated model files after a run, disable cleanup:
+
+```python
+run_scenario(
+    input_path=input_path,
+    scenario=scenario,
+    i=0,
+    mode="local",
+    timeout=360,
+    cleanup=False
+)
+```
+
+Cleanup is enabled by default. Use `cleanup=False` only when you want to keep the generated scenario model and results files for debugging.
+
 ---
 
 ## 9. Run scenarios in parallel
@@ -284,7 +299,7 @@ The exact output format depends on the current implementation of the post-proces
 Typical information to check after a run includes:
 
 * whether the solver completed successfully,
-* whether the temporary `.hrx` copy was deleted,
+* whether the temporary `.hrx` copy was deleted or intentionally kept with `cleanup=False`,
 * whether the `.Results` folder was generated,
 * whether the expected result files were extracted,
 * and whether the scenario data was saved.

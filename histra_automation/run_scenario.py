@@ -33,8 +33,11 @@ def restart_scenario(input_path, scenario, i, retries_left=2):
     except SolverRunError:
         restart_scenario(input_path, scenario, i, retries_left=retries_left-1)
 
-def run_scenario(input_path, scenario, i, mode='local', timeout=360, **kwargs):
-    """Run a single scenario."""
+def run_scenario(input_path, scenario, i, mode='local', timeout=360, cleanup=True, **kwargs):
+    """Run a single scenario.
+
+    Set cleanup=False to keep the copied model files after the run.
+    """
     xml_file = input_path.replace(".hrx", f"_copy_{i+1}.hrx")
     db_path = input_path.replace(".hrx", f"_copy_{i+1}.Results")
     
@@ -58,5 +61,8 @@ def run_scenario(input_path, scenario, i, mode='local', timeout=360, **kwargs):
         traceback.print_exc()
     finally:
         time.sleep(1)
-        print(f"[CLEANUP] Deleting temporary files for scenario {i+1}")
-        delete_model_copies(xml_file)
+        if cleanup:
+            print(f"[CLEANUP] Deleting temporary files for scenario {i+1}")
+            delete_model_copies(xml_file)
+        else:
+            print(f"[CLEANUP] Keeping temporary files for scenario {i+1}")
