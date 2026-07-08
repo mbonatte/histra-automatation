@@ -174,9 +174,11 @@ def get_foundation_locations(root):
     foundations = {}
     for i, p in enumerate(geo["Piers"]):
         x0 = p["Origin"][0]
-        width = p["B1f"] + p["b2"] + p["B3f"]
+        y0 = p["Origin"][1]
+        length = p["B1f"] + p["b2"] + p["B3f"]
+        width = p["W1f"] + p["w2"] + p["W3f"]
         z0 = -(p["H"] + p["Hf"])
-        foundations[f"pier_{i+1}"] = (x0, width, z0)
+        foundations[f"pier_{i+1}"] = (x0, y0, length, width, z0)
 
     return foundations
 
@@ -191,20 +193,20 @@ def foundation_interfaces(root):
 
     foundations_interfaces = {}
 
-    for pier_name, (x0, width, z0) in foundation_locations.items():
-        left, bottom, right = [], [], []
+    for pier_name, (x0, _y0, length, _width, z0) in foundation_locations.items():
+        left_bank, bottom, right_bank = [], [], []
         for inter in restrains_interfaces:
-            x, _, z = map(float, inter["VInt3D1"].split(";"))
+            x, _y, z = map(float, inter["VInt3D1"].split(";"))
 
-            if x0 - width * 0.55 < x < x0 + width * 0.55:
+            if x0 - length * 0.55 < x < x0 + length * 0.55:
                 if abs(z - z0) < 1:
                     bottom.append(inter)
                 elif x < x0:
-                    left.append(inter)
+                    left_bank.append(inter)
                 elif x > x0:
-                    right.append(inter)
+                    right_bank.append(inter)
 
-        foundations_interfaces[pier_name] = (left, bottom, right)
+        foundations_interfaces[pier_name] = (left_bank, bottom, right_bank)
 
     return foundations_interfaces
 

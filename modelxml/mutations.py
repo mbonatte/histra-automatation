@@ -190,100 +190,149 @@ def _get_first_material_key(root: ET.Element, material_names: Tuple[str, ...]) -
     raise KeyError(f"None of the materials were found: {', '.join(material_names)}")
 
 
-def _compute_interface_x_center(interface: dict) -> float:
+def _compute_interface_xyz_center(interface: dict) -> Tuple[float, float, float]:
     x_values = [float(interface[f"VInt3D{i}"].split(';')[0]) for i in range(1, 5)]
-    return sum(x_values) / 4.0
+    y_values = [float(interface[f"VInt3D{i}"].split(';')[1]) for i in range(1, 5)]
+    z_values = [float(interface[f"VInt3D{i}"].split(';')[2]) for i in range(1, 5)]
+
+    return (
+        sum(x_values) / 4.0,
+        sum(y_values) / 4.0,
+        sum(z_values) / 4.0,
+    )
+
 
 def _select_outside_delta_interfaces(
     interfaces: List[dict],
-    location: Tuple[float, float, float],
+    location: Tuple[float, float, float, float, float],
     delta: float,
     mode: str = "uniform",
 ) -> List[str]:
-    x0, width, _ = location
+    x0, y0, length, width, _z0 = location
     delta = float(delta)
 
     if not 0 <= delta <= 1:
         raise ValueError(f"delta must be between 0 and 1. Got: {delta}")
     
-    min_foundation_x = x0 - width / 2
-    max_foundation_x = x0 + width / 2
+    left_bank_x = x0 - length / 2
+    right_bank_x = x0 + length / 2
+
+    upstream_y = y0 - width / 2
+    downstream_y = y0 + width / 2
 
     mode = mode.lower()
 
     if mode == "uniform":
         # delta=0.2 means remove/select 20% total,
         # split equally between left and right.
-        half_zone = ((1 - delta) * width) / 2
+        half_zone = ((1 - delta) * length) / 2
 
         min_x = x0 - half_zone
         max_x = x0 + half_zone
 
         logging.debug(
-            "Uniform scour: x0='%s', width='%s', delta='%s', min_x='%s', max_x='%s'",
+            "Uniform scour: x0='%s', length='%s', delta='%s', min_x='%s', max_x='%s'",
             x0,
-            width,
+            length,
             delta,
             min_x,
             max_x,
         )
 
-        def should_select(x_center: float) -> bool:
+        def should_select(xyz_center: Tuple[float, float, float]) -> bool:
+            x_center = xyz_center[0]
             return x_center < min_x or x_center > max_x
 
     elif mode == "left":
-        # delta=0.2 means select the left 20% of the foundation width.
-        limit_x = min_foundation_x + delta * width
+        # delta=0.2 means select the left 20% of the foundation length.
+        limit_x = left_bank_x + delta * length
 
         logging.debug(
-            "Left scour: x0='%s', width='%s', delta='%s', min_foundation_x='%s', limit_x='%s'",
+            "Left scour: x0='%s', length='%s', delta='%s', left_bank_x='%s', limit_x='%s'",
             x0,
-            width,
+            length,
             delta,
-            min_foundation_x,
+            left_bank_x,
             limit_x,
         )
 
-        def should_select(x_center: float) -> bool:
+        def should_select(xyz_center: Tuple[float, float, float]) -> bool:
+            x_center = xyz_center[0]
             return x_center < limit_x
     
     elif mode == "right":
-        # delta=0.2 means select the right 20% of the foundation width.
-        limit_x = max_foundation_x - delta * width
+        # delta=0.2 means select the right 20% of the foundation length.
+        limit_x = right_bank_x - delta * length
 
         logging.debug(
-            "Right scour: x0='%s', width='%s', delta='%s', limit_x='%s', max_foundation_x='%s'",
+            "Right scour: x0='%s', length='%s', delta='%s', limit_x='%s', right_bank_x='%s'",
             x0,
-            width,
+            length,
             delta,
             limit_x,
-            max_foundation_x,
+            right_bank_x,
         )
 
-        def should_select(x_center: float) -> bool:
+        def should_select(xyz_center: Tuple[float, float, float]) -> bool:
+            x_center = xyz_center[0]
             return x_center > limit_x
+        
+    elif mode == "upstream":
+        # delta=0.2 means select the upstream 20% of the foundation width.
+        limit_y = upstream_y + delta * width
+
+        logging.debug(
+            "Upstream scour: y0='%s', width='%s', delta='%s', upstream_y='%s', limit_y='%s'",
+            y0,
+            width,
+            delta,
+            upstream_y,
+            limit_y,
+        )
+
+        def should_select(xyz_center: Tuple[float, float, float]) -> bool:
+            y_center = xyz_center[1]
+            return y_center < limit_y
+
+    elif mode == "downstream":
+        # delta=0.2 means select the downstream 20% of the foundation width.
+        limit_y = downstream_y - delta * width
+
+        logging.debug(
+            "Downstream scour: y0='%s', width='%s', delta='%s', limit_y='%s', downstream_y='%s'",
+            y0,
+            width,
+            delta,
+            limit_y,
+            downstream_y,
+        )
+
+        def should_select(xyz_center: Tuple[float, float, float]) -> bool:
+            y_center = xyz_center[1]
+            return y_center > limit_y
 
     else:
         raise ValueError(
-            f"Unsupported scour mode '{mode}'. Expected 'left', 'right', or 'uniform'."
+            f"Unsupported scour mode '{mode}'. Expected 'left', 'right', "
+            "'uniform', 'upstream', or 'downstream'."
         )
     
     selected_keys = []
 
     for iface in interfaces:
-        x_center = _compute_interface_x_center(iface)
+        xyz_center = _compute_interface_xyz_center(iface)
 
         logging.debug(
-            "Interface Key='%s', x_center='%s'",
+            "Interface Key='%s', xyz_center='%s'",
             iface.get("Key"),
-            x_center,
+            xyz_center,
         )
 
-        if should_select(x_center):
+        if should_select(xyz_center):
             logging.debug(
-                "Selected interface Key='%s', x_center='%s', mode='%s', delta='%s'",
+                "Selected interface Key='%s', xyz_center='%s', mode='%s', delta='%s'",
                 iface.get("Key"),
-                x_center,
+                xyz_center,
                 mode,
                 delta,
             )

@@ -155,6 +155,8 @@ In this example, the automation searches for the material named `Backfill` and m
 
 The `Name` field must match the material name used in the HiStrA model.
 
+Scour interface changes can be configured per pier and per direction. Supported scour modes are `uniform`, `left`, `right`, `upstream`, and `downstream`; see [Scenario configuration](scenario-configuration.md) for examples.
+
 ### Analysis order and interface changes
 
 Foundation interface changes are model-state changes. They are not stored only inside a single analysis.
