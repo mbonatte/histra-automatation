@@ -25,7 +25,7 @@ set "AI_MEMORY_SERVER_URL=http://127.0.0.1:49374"
 
 REM Defaults. These can be overridden in .env.
 set "AI_MEMORY_LLM_PROVIDER=openai-oauth"
-set "AI_MEMORY_LLM_MODEL=gpt-5-mini"
+set "AI_MEMORY_LLM_MODEL=gpt-5.4-mini"
 set "AI_MEMORY_BIND=127.0.0.1:49374"
 
 REM Central OpenAI OAuth token location.
