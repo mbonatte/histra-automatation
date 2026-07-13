@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # Functions
 # -------------------------------------------------------------------
 
-def generate_mesh(file, mode="local", timeout_seconds=200, **kwargs):
+def generate_mesh(file, mode="local", timeout=200, **kwargs):
     file_name = file.split('\\')[-1]
 
     logger.info("Creating mesh analysis for file: %s", file_name)
@@ -43,7 +43,7 @@ def generate_mesh(file, mode="local", timeout_seconds=200, **kwargs):
         run_set_analysis_on(file, "StartMesh")
 
         logger.info("Running mesh analysis for file: %s", file_name)
-        run_program(file, mode, timeout_seconds)
+        run_program(file, mode, timeout)
 
     except Exception as e:
         logger.exception("Error during mesh generation for %s: %s", file_name, e)

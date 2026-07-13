@@ -123,6 +123,7 @@ def update_node_to_model_point(root, node_key):
         model_point.set(key, str(value))
 
     # Append the new ModelPoint to the root (or specific parent if needed)
+    logging.debug(f"Node {node_key} set to ModelPoint {next_key}.")
     root.append(model_point)
 
 def set_model_points(root):

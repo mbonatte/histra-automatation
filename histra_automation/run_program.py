@@ -29,7 +29,7 @@ def is_running_as_admin() -> bool:
     except Exception:
         return False
 
-def run_program(model_path, mode="psexec", timeout_seconds=600, print_output: bool = False):
+def run_program(model_path, mode="psexec", timeout=600, print_output: bool = False):
     model_path = Path(model_path).resolve()
 
     if not model_path.exists():
@@ -74,7 +74,7 @@ def run_program(model_path, mode="psexec", timeout_seconds=600, print_output: bo
             cmd,
             capture_output=True,
             text=True,
-            timeout=timeout_seconds,
+            timeout=timeout,
             check=True,
         )
 
@@ -93,7 +93,7 @@ def run_program(model_path, mode="psexec", timeout_seconds=600, print_output: bo
         stdout_text = decode_output(e.stdout)
         stderr_text = decode_output(e.stderr)
 
-        logger.error("Timeout: %s exceeded %s seconds.", model_path, timeout_seconds)
+        logger.error("Timeout: %s exceeded %s seconds.", model_path, timeout)
         logger.error("--- PARTIAL STDOUT ---\n%s", stdout_text)
         logger.error("--- PARTIAL STDERR ---\n%s", stderr_text)
 
@@ -114,7 +114,7 @@ def run_program(model_path, mode="psexec", timeout_seconds=600, print_output: bo
         raise SolverRunError(
             str(model_path),
             (
-                f"Solver timed out after {timeout_seconds} seconds.\n"
+                f"Solver timed out after {timeout} seconds.\n"
                 f"Model: {model_path}\n"
                 f"STDOUT:\n{stdout_text}\n\n"
                 f"STDERR:\n{stderr_text}"

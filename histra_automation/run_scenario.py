@@ -42,7 +42,7 @@ def run_scenario(input_path, scenario, i, mode='local', timeout=360, cleanup=Tru
     db_path = input_path.replace(".hrx", f"_copy_{i+1}.Results")
     
     try:
-        pre_processing(input_path, scenario, xml_file, **kwargs)
+        pre_processing(input_path, scenario, xml_file, mode=mode, timeout=timeout, **kwargs)
         time.sleep(0.5)
         
         processing(xml_file, scenario, mode, timeout, **kwargs)

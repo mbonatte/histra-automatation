@@ -260,10 +260,54 @@ def model_points_location_map(root):
     location_map = {}
 
     for i, pier in enumerate(geometry_data['Piers']):
-        x = pier['Origin'][0]
-        node = _get_closest_node(node_list, x, 0, 0)
-        location_name = f"Pier_{i+1}_top"
-        location_map[location_name] = {key: node[key] for key in ["Key", "X", "Y", "Z"]}
+        pier_name = f"Pier_{i+1}"
+        foundation_name = f"Foundation_{i+1}"
+        
+        x_center = pier["Origin"][0]
+
+        pier_width = pier["w2"]
+        foundation_width = pier["W1f"] + pier["w2"] + pier["W3f"]
+
+        pier_half_width = pier_width / 2
+        foundation_half_width = foundation_width / 2
+
+        pier_z_top = 0
+        pier_z_bottom = pier_z_top - pier["H"]
+
+        foundation_z_top = pier_z_bottom
+        foundation_z_bottom = foundation_z_top - pier["Hf"]
+
+        pier_locations = {
+            "center_top":     (x_center, 0, pier_z_top),
+            "upstream_top":   (x_center, -pier_half_width, pier_z_top),
+            "downstream_top": (x_center, pier_half_width, pier_z_top),
+
+            "center_bottom":     (x_center, 0, pier_z_bottom),
+            "upstream_bottom":   (x_center, -pier_half_width, pier_z_bottom),
+            "downstream_bottom": (x_center, pier_half_width, pier_z_bottom),
+        }
+
+        foundation_locations = {
+            "center_top":     (x_center, 0, foundation_z_top),
+            "upstream_top":   (x_center, -foundation_half_width, foundation_z_top),
+            "downstream_top": (x_center, foundation_half_width, foundation_z_top),
+
+            "center_bottom":     (x_center, 0, foundation_z_bottom),
+            "upstream_bottom":   (x_center, -foundation_half_width, foundation_z_bottom),
+            "downstream_bottom": (x_center, foundation_half_width, foundation_z_bottom),
+        }
+
+        for base_name, locations in [
+            (pier_name, pier_locations),
+            (foundation_name, foundation_locations),
+        ]:
+            for suffix, (x, y, z) in locations.items():
+                node = _get_closest_node(node_list, x, y, z)
+
+                location_map[f"{base_name}_{suffix}"] = {
+                    key: node[key]
+                    for key in ["Key", "X", "Y", "Z"]
+                }
 
     for i, arch in enumerate(geometry_data['Spans']):
         if i == 0:

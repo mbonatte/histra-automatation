@@ -67,6 +67,61 @@ def get_reactions(db_path, analysis_key, step=None, all_steps=False, **kwargs):
         return {"Reactions": sample.to_dict('records')}
     
 
+def get_main_modal_contributions(db_path, analysis_key, top_n=1, **kwargs):
+    """
+    Get the modes with the main modal mass participation in X, Y, and Z.
+    top_n : Number of dominant modes to return per direction.
+    """
+
+    df = get_dataframe(db_path, "ModalValues")
+
+    df = df[df["AnalysisKey"] == analysis_key]
+
+    if df.empty:
+        return {
+            "ModalContributions": {
+                "X": [],
+                "Y": [],
+                "Z": [],
+                "Cumulative": {}
+            }
+        }
+
+    # Columns that are useful to understand each mode
+    base_cols = [
+        "Step", "Fn",
+        # "GammaX", "GammaY", "GammaZ",
+        # "MassaX", "MassaY", "MassaZ",
+        # "MTotX", "MTotY", "MTotZ",
+        "Mx_pcent", "My_pcent", "Mz_pcent",
+        # "UMaxX", "UMaxY", "UMaxZ"
+    ]
+
+    # Keep only columns that actually exist
+    base_cols = [c for c in base_cols if c in df.columns]
+
+    def top_modes(direction_col):
+        return (
+            df.sort_values(by=direction_col, ascending=False)
+              .head(top_n)[base_cols]
+              .to_dict("records")
+        )
+
+    result = {
+        "ModalContributions": {
+            "X": top_modes("Mx_pcent"),
+            "Y": top_modes("My_pcent"),
+            "Z": top_modes("Mz_pcent"),
+            "Cumulative": {
+                "Mx_pcent": float(df["Mx_pcent"].sum()),
+                "My_pcent": float(df["My_pcent"].sum()),
+                "Mz_pcent": float(df["Mz_pcent"].sum())
+            }
+        }
+    }
+
+    return result
+
 # tables_to_check = [
 #     "DisplModelPoints",
 #     "NodeCStates", "QuadStates", 
