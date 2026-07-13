@@ -1,5 +1,7 @@
 import logging
+import time
 from collections import OrderedDict
+from datetime import datetime
 
 from modelxml.ops import (
     run_copy_paste,
@@ -98,6 +100,11 @@ def processing(xml_file, scenario, mode="local", timeout=360, **kwargs):
     logger.info("Starting processing for index: %s", index)
 
     requested_analyses = scenario["Analysis"]
+    processing_started = time.perf_counter()
+    timing = scenario.setdefault("Timing", {})
+    timing["Analysis_Date"] = datetime.now().astimezone().isoformat(timespec="seconds")
+    timing["Per_Analysis_Seconds"] = {}
+
     for analysis_name, interfaces in _analysis_run_queue(xml_file, requested_analyses):
         try:
             logger.info("Updating foundation interfaces for index %s", index)
@@ -105,12 +112,17 @@ def processing(xml_file, scenario, mode="local", timeout=360, **kwargs):
             
             logger.info("Running analysis '%s' for index %s", analysis_name, index)
             run_set_analysis_on(xml_file, analysis_name)
+            analysis_started = time.perf_counter()
             run_program(xml_file, mode, timeout)
+            timing["Per_Analysis_Seconds"][analysis_name] = round(
+                time.perf_counter() - analysis_started, 3
+            )
         
         except Exception as e:
             logger.exception("Processing failed for %s - %s: %s", index, analysis_name, e)
             raise
 
+    timing["Total_Analysis_Seconds"] = round(time.perf_counter() - processing_started, 3)
     logger.info("Processing complete for index: %s", index)
 
 
