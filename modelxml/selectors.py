@@ -309,6 +309,11 @@ def model_points_location_map(root):
                     for key in ["Key", "X", "Y", "Z"]
                 }
 
+    # Arch midpoint locations are derived from adjacent piers. Models without
+    # piers (for example, a single-span model) have no such reference point.
+    if not geometry_data['Piers']:
+        return location_map
+
     for i, arch in enumerate(geometry_data['Spans']):
         if i == 0:
             x_pier = geometry_data['Piers'][i]['Origin'][0]
