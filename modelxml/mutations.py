@@ -155,6 +155,141 @@ def create_start_mesh_analysis(root):
                 elem.set(k, v)
             break
 
+def create_load_condition(root):
+    last_load_condition = root.findall("LoadCondition")[-1]
+    load_condition = copy.deepcopy(last_load_condition)
+    number = int(last_load_condition.get("Name").split("_")[-1]) + 1
+
+    load_condition.set("Id", str(int(last_load_condition.get("Id")) + 1))
+    load_condition.set("Name", f"Load_Condition_{number}")
+    load_condition.set("Description", f"Load_Condition_{number}")
+
+    root.insert(list(root).index(last_load_condition) + 1, load_condition)
+    return load_condition.get("Id")
+
+def add_line_load_definition(root):
+    load_condition_id = create_load_condition(root)
+    last_line_load = [
+        template for template in root.iter("Template")
+        if template.get("Name", "").startswith("VERTICAL_APPLIED_LOAD")
+    ][-1]
+    line_load = copy.deepcopy(last_line_load)
+    key = str(max(int(template.get("Key")) for template in root.iter("Template")) + 1)
+    number = int(last_line_load.get("Name").split("_")[-1]) + 1
+
+    line_load.set("Key", key)
+    line_load.set("Name", f"VERTICAL_APPLIED_LOAD_{number}")
+
+    for item in line_load.iter("LoadTemplateItem"):
+        item.set("IdLoadTemplate", key)
+        item.set("IdLoadCondition", load_condition_id)
+
+    root.insert(list(root).index(list(root.iter("Template"))[-1]) + 1, line_load)
+    return key
+
+def create_load_combination(root):
+    last_load_combination = [
+        combination for combination in root.iter("LoadCombination")
+        if combination.get("Name", "").startswith("User_combination")
+    ][-1]
+    load_combination = copy.deepcopy(last_load_combination)
+    key = str(int(last_load_combination.get("Key")) + 1)
+    number = int(last_load_combination.get("Name").split("_")[-1]) + 1
+
+    load_combination.set("Key", key)
+    load_combination.set("Name", f"User_combination_{number}")
+
+    for item in load_combination.iter("Item"):
+        item.set("LoadCombinationKey", key)
+
+    root.insert(list(root).index(last_load_combination) + 1, load_combination)
+    return key
+
+def create_line_load_analyses(root, x, load_combination_key):
+    live_loads = [
+        analysis for analysis in root.iter("Analysis")
+        if analysis.get("Name") == "LiveLoad_1"
+    ]
+    key = max(int(analysis.get("Key")) for analysis in root.iter("Analysis"))
+    load_function_key = max(
+        int(analysis.get("LoadFunctionKey")) for analysis in root.iter("Analysis")
+    )
+    analysis_index = list(root).index(list(root.iter("Analysis"))[-1]) + 1
+    load_function_item_key = max(
+        int(item.get("key")) for item in root.iter("LoadFunctionItem")
+    )
+
+    for analysis in live_loads:
+        key += 1
+        load_function_key += 1
+        line_load_analysis = copy.deepcopy(analysis)
+        line_load_analysis.set("Key", str(key))
+        line_load_analysis.set("Name", f"{analysis.get('Name')}_Pos_{x}")
+        line_load_analysis.set(
+            "Description",
+            f"Copy of analysis {analysis.get('Name')} that runs at X={x}",
+        )
+        line_load_analysis.set("LoadFunctionKey", str(load_function_key))
+        line_load_analysis.set("LoadCombinationKey", load_combination_key)
+
+        for state in line_load_analysis.find("States").findall("State"):
+            state.set("Key", str(key))
+        for phase in line_load_analysis.iter("AdapticPhase"):
+            phase.set("ParentKey", str(key))
+
+        root.insert(analysis_index, line_load_analysis)
+        analysis_index += 1
+
+        load_function = ET.Element(
+            "LoadFunction",
+            {"key": str(load_function_key), "typeDiscr": "false", "DiscrVal": "0.2"},
+        )
+        root.insert(list(root).index(list(root.iter("LoadFunction"))[-1]) + 1, load_function)
+
+        for pseudo_time, multiplier in [("0", "0"), ("1", "1")]:
+            load_function_item_key += 1
+            load_function_item = ET.Element(
+                "LoadFunctionItem",
+                {
+                    "key": str(load_function_item_key),
+                    "loadFunctionKey": str(load_function_key),
+                    "pseudoTime": pseudo_time,
+                    "multiplier": multiplier,
+                },
+            )
+            root.insert(
+                list(root).index(list(root.iter("LoadFunctionItem"))[-1]) + 1,
+                load_function_item,
+            )
+
+def add_line_load(root, x):
+    load_template_id = add_line_load_definition(root)
+    load_combination_key = create_load_combination(root)
+    create_line_load_analyses(root, x, load_combination_key)
+    last_line_load = [
+        load for load in root.iter("LoadElement")
+        if load.get("TypeOf") == "HiStrA.Objects.LineLoadElement"
+    ][-1]
+    line_load = copy.deepcopy(last_line_load)
+    point1 = last_line_load.get("Point1").split(";")
+    point2 = last_line_load.get("Point2").split(";")
+    x_value = float(x)
+    quad = min(
+        root.iter("Quad"),
+        key=lambda quad: (
+            (float(quad.get("G").split(";")[0]) - x_value) ** 2
+            + (float(quad.get("G").split(";")[2]) - float(point1[2])) ** 2
+        ),
+    )
+
+    line_load.set("Key", str(int(last_line_load.get("Key")) + 1))
+    line_load.set("ElementKey", quad.get("Key"))
+    line_load.set("IdLoadTemplate", load_template_id)
+    line_load.set("Point1", f"{x};{point1[1]};{point1[2]}")
+    line_load.set("Point2", f"{x};{point2[1]};{point2[2]}")
+
+    root.insert(list(root).index(last_line_load) + 1, line_load)
+
 def update_materials(root, materials):
     for material in materials:
         update_material(root, material)
