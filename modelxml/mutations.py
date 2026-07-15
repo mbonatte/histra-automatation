@@ -249,7 +249,9 @@ def _line_load_condition_id(root):
     if not line_loads:
         return None
 
-    template_key = line_loads[-1].get("IdLoadTemplate")
+    # The first line load belongs to the source model. Later line loads are
+    # generated positioned copies and must not redefine the source condition.
+    template_key = line_loads[0].get("IdLoadTemplate")
     template = root.find(f".//Template[@Key='{template_key}']")
     if template is None:
         return None
@@ -285,6 +287,34 @@ def activate_line_load_condition(root, source_analysis):
     if condition_id is None or combination is None:
         return
     _set_load_condition_active(combination, condition_id)
+
+
+def _load_combination_at_position(root, x):
+    """Return the active user combination for an already-created line-load X."""
+    x_value = float(x)
+    for line_load in root.iter("LoadElement"):
+        if line_load.get("TypeOf") != "HiStrA.Objects.LineLoadElement":
+            continue
+        point1 = line_load.get("Point1", "").split(";")
+        if not point1 or float(point1[0]) != x_value:
+            continue
+
+        template_key = line_load.get("IdLoadTemplate")
+        template = root.find(f".//Template[@Key='{template_key}']")
+        if template is None:
+            continue
+        template_item = next(template.iter("LoadTemplateItem"), None)
+        if template_item is None:
+            continue
+        condition_id = template_item.get("IdLoadCondition")
+
+        for combination in root.iter("LoadCombination"):
+            if any(
+                item.get("ColumnKey") == condition_id and item.get("Val") == "1"
+                for item in combination.iter("Item")
+            ):
+                return combination.get("Key")
+    return None
 
 def create_line_load_analyses(root, x, load_combination_key, source_analysis="LiveLoad_1"):
     live_loads = [
@@ -352,6 +382,14 @@ def add_line_load(root, x, source_analysis="LiveLoad_1"):
     ):
         raise ValueError(f"No '{source_analysis}' analysis found in XML")
     activate_line_load_condition(root, source_analysis)
+
+    existing_load_combination_key = _load_combination_at_position(root, x)
+    if existing_load_combination_key is not None:
+        create_line_load_analyses(
+            root, x, existing_load_combination_key, source_analysis
+        )
+        return
+
     load_template_id = add_line_load_definition(root)
     line_template = root.find(f".//Template[@Key='{load_template_id}']")
     load_template_item = next(line_template.iter("LoadTemplateItem"), None)

@@ -224,10 +224,11 @@ class TestAddLineLoad(unittest.TestCase):
                 </Template>
                 <Template Key="200" Name="Other" />
                 <LoadCombination Key="15" Name="User_combination_1">
-                    <Item LoadCombinationKey="15" />
+                    <Item LoadCombinationKey="15" ColumnKey="11" RowKey="1" Val="0" />
                 </LoadCombination>
                 <LoadCombination Key="17" Name="User_combination_2">
-                    <Item LoadCombinationKey="17" />
+                    <Item LoadCombinationKey="17" ColumnKey="11" RowKey="1" Val="0" />
+                    <Item LoadCombinationKey="17" ColumnKey="12" RowKey="1" Val="0" />
                 </LoadCombination>
                 <Analysis Key="20" Name="LiveLoad_0" Description="Base live load"
                     LoadCombinationKey="15" LoadFunctionKey="20">
@@ -285,6 +286,21 @@ class TestAddLineLoad(unittest.TestCase):
         self.assertEqual(children[children.index(root.findall("Template")[-1]) - 1].get("Key"), "200")
         self.assertEqual(children[children.index(root.findall("LoadCombination")[-1]) - 1].get("Key"), "17")
         self.assertEqual(children[children.index(root.findall("LoadCondition")[-1]) - 1].get("Id"), "12")
+
+        add_line_load(root, 590, "LiveLoad_1")
+
+        self.assertEqual(len(root.findall("LoadCondition")), 3)
+        self.assertEqual(len(root.findall("LoadCombination")), 3)
+        self.assertEqual(len(root.findall("LoadElement")), 2)
+        positioned = {
+            analysis.get("Name"): analysis.get("LoadCombinationKey")
+            for analysis in root.findall("Analysis")
+            if analysis.get("Name", "").endswith("_Pos_590")
+        }
+        self.assertEqual(
+            positioned,
+            {"LiveLoad_0_Pos_590": "18", "LiveLoad_1_Pos_590": "18"},
+        )
 
 
 if __name__ == "__main__":
