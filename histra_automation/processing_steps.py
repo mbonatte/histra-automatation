@@ -10,7 +10,9 @@ from modelxml.ops import (
     run_set_all_analyses_off, 
     run_set_analysis_on, 
     run_create_start_mesh_analysis, 
-    run_update_foundation_ifaces
+    run_update_foundation_ifaces,
+    run_add_line_load,
+    run_activate_line_load_condition,
 )
 from modelxml.xmlio import read_xml
 
@@ -29,6 +31,7 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+LOAD_POSITION_KEY = "load_pos"
 
 # -------------------------------------------------------------------
 # Functions
@@ -77,8 +80,13 @@ def pre_processing(input_path, scenario, xml_file, **kwargs):
     logger.info("Starting pre-processing for scenario index: %s", index)
 
     try:
+        # Validate scenario metadata before mutating the copied model.
+        _expand_analysis_requests(scenario["Analysis"])
+
         logger.info("Copying input: %s → %s", input_path.split('\\')[-1], xml_file.split('\\')[-1])
         run_copy_paste(input_path, out_path=xml_file)
+
+        _add_requested_load_positions(xml_file, scenario["Analysis"])
 
         logger.info("Validating model file: %s", xml_file.split('\\')[-1])
         validate_model_file(xml_file, analysis_names=_scenario_analysis_names(scenario))
@@ -99,7 +107,7 @@ def processing(xml_file, scenario, mode="local", timeout=360, **kwargs):
     index = xml_file.split("_")[-1].split(".")[0]
     logger.info("Starting processing for index: %s", index)
 
-    requested_analyses = scenario["Analysis"]
+    requested_analyses = _expand_analysis_requests(scenario["Analysis"])
     processing_started = time.perf_counter()
     timing = scenario.setdefault("Timing", {})
     timing["Analysis_Date"] = datetime.now().astimezone().isoformat(timespec="seconds")
@@ -144,6 +152,76 @@ def _analysis_run_queue(xml_file, requested_analyses):
         queue.setdefault(analysis_name, interfaces)
 
     return queue.items()
+
+
+def _add_requested_load_positions(xml_file, requested_analyses):
+    """Create the requested positioned copies before the model is validated/meshed."""
+    for analysis_name, config in requested_analyses.items():
+        for position in _load_positions(config, analysis_name):
+            if not position:
+                logger.info("Activating the existing load condition for '%s'", analysis_name)
+                run_activate_line_load_condition(xml_file, analysis_name)
+                continue
+            x = position.get("x")
+            if x is not None:
+                logger.info("Adding positioned copy of '%s' at X=%s", analysis_name, x)
+                run_add_line_load(xml_file, x, analysis_name)
+
+
+def _expand_analysis_requests(requested_analyses):
+    """Replace load-position metadata with concrete analysis names, preserving order."""
+    expanded = OrderedDict()
+    for analysis_name, config in requested_analyses.items():
+        positions = _load_positions(config, analysis_name)
+        interface_config = _interface_config(config, analysis_name)
+
+        if not positions:
+            expanded[analysis_name] = interface_config
+            continue
+
+        for position in positions:
+            if not position:
+                expanded.setdefault(analysis_name, interface_config)
+                continue
+            x = position["x"]
+            positioned_name = f"{analysis_name}_Pos_{x}"
+            if positioned_name in expanded:
+                raise ValueError(
+                    f"Analysis '{analysis_name}' has duplicate load position X={x}."
+                )
+            expanded[positioned_name] = {}
+    return expanded
+
+
+def _load_positions(config, analysis_name):
+    if isinstance(config, list):
+        # Accept the original shorthand: "LiveLoad_0": [{}, {"x": 660}].
+        positions = config
+    elif isinstance(config, dict) and LOAD_POSITION_KEY in config:
+        positions = config[LOAD_POSITION_KEY]
+    else:
+        return []
+
+    if not isinstance(positions, list) or not positions:
+        raise ValueError(
+            f"Analysis '{analysis_name}' load_pos must be a non-empty list of {{}} or {{'x': value}} entries."
+        )
+    for position in positions:
+        if not isinstance(position, dict) or set(position) - {"x"}:
+            raise ValueError(
+                f"Analysis '{analysis_name}' load_pos entries must be {{}} or {{'x': value}}."
+            )
+        if position and position["x"] is None:
+            raise ValueError(f"Analysis '{analysis_name}' load_pos x cannot be None.")
+    return positions
+
+
+def _interface_config(config, analysis_name):
+    if isinstance(config, list):
+        return {}
+    if not isinstance(config, dict):
+        raise ValueError(f"Analysis '{analysis_name}' configuration must be a dictionary.")
+    return {key: value for key, value in config.items() if key != LOAD_POSITION_KEY}
 
 
 def _missing_required_analyses(root, analysis_name):
@@ -205,16 +283,13 @@ def _analysis_is_completed(analysis):
 
 
 def _scenario_analysis_names(scenario):
-    analyses = scenario.get("Analysis", {})
-    if isinstance(analyses, dict):
-        return analyses.keys()
-    return analyses
+    return _expand_analysis_requests(scenario.get("Analysis", {})).keys()
 
 
 def pos_processing(scenario, db_path, xml_file, **kwargs):
     logger.info("Starting post-processing for file: %s", xml_file.split('\\')[-1])
 
-    for analysis_name, interfaces in scenario["Analysis"].items():
+    for analysis_name in _expand_analysis_requests(scenario["Analysis"]):
         try:
             logger.info("Saving outputs for analysis '%s'", analysis_name)
             save_outputs(scenario, analysis_name, db_path, xml_file, **kwargs)

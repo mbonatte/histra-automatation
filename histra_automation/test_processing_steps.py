@@ -4,11 +4,33 @@ from unittest.mock import patch
 
 from histra_automation.processing_steps import (
     _analysis_is_completed,
+    _expand_analysis_requests,
     _missing_required_analyses,
 )
 
 
 class TestAnalysisDependencies(unittest.TestCase):
+    def test_load_positions_expand_to_base_and_positioned_analyses(self):
+        requests = {
+            "LiveLoad_0": {"load_pos": [{}, {"x": 660}]},
+            "scour_1": {"pier_1": {"upstream": 0.2}},
+        }
+
+        self.assertEqual(
+            list(_expand_analysis_requests(requests).items()),
+            [
+                ("LiveLoad_0", {}),
+                ("LiveLoad_0_Pos_660", {}),
+                ("scour_1", {"pier_1": {"upstream": 0.2}}),
+            ],
+        )
+
+    def test_load_position_shorthand_is_supported(self):
+        self.assertEqual(
+            list(_expand_analysis_requests({"LiveLoad_0": [{}, {"x": 660}]})),
+            ["LiveLoad_0", "LiveLoad_0_Pos_660"],
+        )
+
     def test_missing_required_analyses_are_returned_in_dependency_order(self):
         root = ET.fromstring("""
         <Root>

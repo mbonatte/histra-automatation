@@ -87,3 +87,23 @@ scenario = {
 ```
 
 If an analysis must run with a specific interface condition, either place it immediately after the scour phase that sets that condition or repeat the same interface configuration for that analysis so the automation applies it again before running the solver.
+
+## Live-load positions
+
+Use `load_pos` to run an existing live-load analysis and/or create positioned copies.
+An empty dictionary runs the analysis at the load position already present in the model;
+an `x` entry creates a copy with its line load at that X coordinate:
+
+```python
+scenario = {
+    "Analysis": {
+        "LiveLoad_0": {
+            "load_pos": [{}, {"x": 660}],
+        },
+    }
+}
+```
+
+This runs `LiveLoad_0` and the generated `LiveLoad_0_Pos_660` analysis. Positioned
+copies are created before validation and mesh generation, then are included in both
+processing and result export. The order of entries in `load_pos` is the run order.

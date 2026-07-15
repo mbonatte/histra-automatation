@@ -118,6 +118,32 @@ class TestCreateLoadCondition(unittest.TestCase):
         self.assertEqual(load_condition.get("Description"), "Load_Condition_3")
         self.assertEqual(load_condition.get("Action"), "3")
 
+    def test_adds_inactive_column_to_each_combination_row(self):
+        root = ET.fromstring("""
+            <HiStrA>
+                <LoadCondition Id="11" Name="Load_Condition_1" />
+                <LoadCondition Id="12" Name="Load_Condition_2" />
+                <LoadCombination Key="6" Name="SEISMIC">
+                    <Item LoadCombinationKey="6" ColumnKey="11" RowKey="1" Val="1" />
+                    <Item LoadCombinationKey="6" ColumnKey="12" RowKey="1" Val="1" />
+                    <Item LoadCombinationKey="6" ColumnKey="11" RowKey="2" Val="1" />
+                    <Item LoadCombinationKey="6" ColumnKey="12" RowKey="2" Val="1" />
+                </LoadCombination>
+            </HiStrA>
+        """)
+
+        create_load_condition(root)
+
+        columns = [
+            (item.get("RowKey"), item.get("ColumnKey"), item.get("Val"))
+            for item in root.find("LoadCombination").findall("Item")
+        ]
+        self.assertEqual(
+            columns,
+            [("1", "11", "1"), ("1", "12", "1"), ("1", "13", "0"),
+             ("2", "11", "1"), ("2", "12", "1"), ("2", "13", "0")],
+        )
+
 
 class TestAddLineLoadDefinition(unittest.TestCase):
     def test_copies_last_vertical_line_load_for_new_load_condition(self):
@@ -165,7 +191,7 @@ class TestCreateLoadCombination(unittest.TestCase):
             </HiStrA>
         """)
 
-        create_load_combination(root)
+        create_load_combination(root, active_load_condition_id="2")
 
         combination = root.findall("LoadCombination")[-1]
         self.assertEqual(combination.get("Key"), "18")
@@ -173,6 +199,10 @@ class TestCreateLoadCombination(unittest.TestCase):
         self.assertEqual(
             [item.get("LoadCombinationKey") for item in combination.findall("Item")],
             ["18", "18"],
+        )
+        self.assertEqual(
+            [item.get("Val") for item in combination.findall("Item")],
+            [None, "1"],
         )
 
 
@@ -219,7 +249,7 @@ class TestAddLineLoad(unittest.TestCase):
             </HiStrA>
         """)
 
-        add_line_load(root, 590)
+        add_line_load(root, 590, "LiveLoad_0")
 
         line_load = root.findall("LoadElement")[-1]
         self.assertEqual(line_load.get("Key"), "4")
@@ -236,12 +266,12 @@ class TestAddLineLoad(unittest.TestCase):
         ]
         self.assertEqual(
             [analysis.get("Name") for analysis in analyses],
-            ["LiveLoad_1_Pos_590"],
+            ["LiveLoad_0_Pos_590"],
         )
         self.assertEqual([analysis.get("Key") for analysis in analyses], ["22"])
         self.assertEqual([analysis.get("LoadFunctionKey") for analysis in analyses], ["22"])
         self.assertEqual([analysis.get("LoadCombinationKey") for analysis in analyses], ["18"])
-        self.assertEqual(analyses[0].find(".//AdapticPhase").get("ParentKey"), "22")
+        self.assertIsNone(analyses[0].find(".//AdapticPhase"))
         load_function = root.findall("LoadFunction")[-1]
         self.assertEqual(load_function.get("key"), "22")
         self.assertEqual(

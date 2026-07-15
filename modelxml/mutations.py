@@ -165,7 +165,30 @@ def create_load_condition(root):
     load_condition.set("Description", f"Load_Condition_{number}")
 
     root.insert(list(root).index(last_load_condition) + 1, load_condition)
+    _add_load_condition_columns(root, load_condition.get("Id"))
     return load_condition.get("Id")
+
+
+def _add_load_condition_columns(root, load_condition_id):
+    """Add an inactive column for a new condition to every existing combination.
+
+    HiStrA requires each combination row to contain a column for every load
+    condition, even where that condition does not contribute to the combination.
+    """
+    for combination in root.iter("LoadCombination"):
+        items_by_row = {}
+        for item in combination.findall("Item"):
+            items_by_row.setdefault(item.get("RowKey", "1"), []).append(item)
+
+        for items in items_by_row.values():
+            if any(item.get("ColumnKey") == load_condition_id for item in items):
+                continue
+
+            column = copy.deepcopy(items[-1])
+            column.set("ColumnKey", load_condition_id)
+            # New conditions must not alter the pre-existing combinations.
+            column.set("Val", "0")
+            combination.insert(list(combination).index(items[-1]) + 1, column)
 
 def add_line_load_definition(root):
     load_condition_id = create_load_condition(root)
@@ -187,7 +210,7 @@ def add_line_load_definition(root):
     root.insert(list(root).index(list(root.iter("Template"))[-1]) + 1, line_load)
     return key
 
-def create_load_combination(root):
+def create_load_combination(root, active_load_condition_id=None):
     last_load_combination = [
         combination for combination in root.iter("LoadCombination")
         if combination.get("Name", "").startswith("User_combination")
@@ -202,14 +225,74 @@ def create_load_combination(root):
     for item in load_combination.iter("Item"):
         item.set("LoadCombinationKey", key)
 
+    if active_load_condition_id is not None:
+        _set_load_condition_active(
+            load_combination, active_load_condition_id, value="1"
+        )
+
     root.insert(list(root).index(last_load_combination) + 1, load_combination)
     return key
 
-def create_line_load_analyses(root, x, load_combination_key):
+
+def _set_load_condition_active(load_combination, load_condition_id, value="1"):
+    """Set a load-condition column's multiplier in every combination row."""
+    for item in load_combination.iter("Item"):
+        if item.get("ColumnKey") == str(load_condition_id):
+            item.set("Val", value)
+
+
+def _line_load_condition_id(root):
+    line_loads = [
+        load for load in root.iter("LoadElement")
+        if load.get("TypeOf") == "HiStrA.Objects.LineLoadElement"
+    ]
+    if not line_loads:
+        return None
+
+    template_key = line_loads[-1].get("IdLoadTemplate")
+    template = root.find(f".//Template[@Key='{template_key}']")
+    if template is None:
+        return None
+
+    item = next(template.iter("LoadTemplateItem"), None)
+    return item.get("IdLoadCondition") if item is not None else None
+
+
+def _line_load_condition_ids(root):
+    condition_ids = set()
+    for template in root.iter("Template"):
+        if template.get("PurposeType") != "LineLoad":
+            continue
+        for item in template.iter("LoadTemplateItem"):
+            condition_id = item.get("IdLoadCondition")
+            if condition_id:
+                condition_ids.add(condition_id)
+    return condition_ids
+
+
+def activate_line_load_condition(root, source_analysis):
+    """Activate the source line-load condition in its analysis combination."""
+    analysis = next(
+        (a for a in root.iter("Analysis") if a.get("Name") == source_analysis),
+        None,
+    )
+    if analysis is None:
+        raise ValueError(f"No '{source_analysis}' analysis found in XML")
+
+    condition_id = _line_load_condition_id(root)
+    combination_key = analysis.get("LoadCombinationKey")
+    combination = root.find(f".//LoadCombination[@Key='{combination_key}']")
+    if condition_id is None or combination is None:
+        return
+    _set_load_condition_active(combination, condition_id)
+
+def create_line_load_analyses(root, x, load_combination_key, source_analysis="LiveLoad_1"):
     live_loads = [
         analysis for analysis in root.iter("Analysis")
-        if analysis.get("Name") == "LiveLoad_1"
+        if analysis.get("Name") == source_analysis
     ]
+    if not live_loads:
+        raise ValueError(f"No '{source_analysis}' analysis found in XML")
     key = max(int(analysis.get("Key")) for analysis in root.iter("Analysis"))
     load_function_key = max(
         int(analysis.get("LoadFunctionKey")) for analysis in root.iter("Analysis")
@@ -262,10 +345,26 @@ def create_line_load_analyses(root, x, load_combination_key):
                 load_function_item,
             )
 
-def add_line_load(root, x):
+def add_line_load(root, x, source_analysis="LiveLoad_1"):
+    """Add a line load at *x* and an analysis cloned from *source_analysis*."""
+    if not any(
+        analysis.get("Name") == source_analysis for analysis in root.iter("Analysis")
+    ):
+        raise ValueError(f"No '{source_analysis}' analysis found in XML")
+    activate_line_load_condition(root, source_analysis)
     load_template_id = add_line_load_definition(root)
-    load_combination_key = create_load_combination(root)
-    create_line_load_analyses(root, x, load_combination_key)
+    line_template = root.find(f".//Template[@Key='{load_template_id}']")
+    load_template_item = next(line_template.iter("LoadTemplateItem"), None)
+    load_condition_id = load_template_item.get("IdLoadCondition")
+    load_combination_key = create_load_combination(root, load_condition_id)
+    load_combination = root.find(
+        f".//LoadCombination[@Key='{load_combination_key}']"
+    )
+    # A positioned copy must apply only its own line load, not the source load
+    # that was activated in the source live-load combination.
+    for condition_id in _line_load_condition_ids(root) - {load_condition_id}:
+        _set_load_condition_active(load_combination, condition_id, value="0")
+    create_line_load_analyses(root, x, load_combination_key, source_analysis)
     last_line_load = [
         load for load in root.iter("LoadElement")
         if load.get("TypeOf") == "HiStrA.Objects.LineLoadElement"
